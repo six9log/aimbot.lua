@@ -24,123 +24,130 @@ local _STATE = {
 
 local _CONNECTIONS = {}
 
--- 1. BOTÃO QUADRADO (ABRIR/FECHAR) - Mantido, pois é o toggle principal
-local _tgui = Instance.new("ScreenGui", _u)
+--====================================================
+-- BOTÃO QUADRADO (TOGGLE)
+--====================================================
+local _tgui = Instance.new("ScreenGui")
 _tgui.Name = "DeltaToggle"
+_tgui.Parent = _u
 
-local _btnToggle = Instance.new("TextButton", _tgui)
+local _btnToggle = Instance.new("TextButton")
+_btnToggle.Parent = _tgui
 _btnToggle.Size = UDim2.new(0, 50, 0, 50)
 _btnToggle.Position = UDim2.new(0, 15, 0.5, -25)
 _btnToggle.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 _btnToggle.Text = "MENU"
 _btnToggle.TextColor3 = Color3.new(1, 1, 1)
 
--- 2. INTERFACE PRINCIPAL (AGORA COM LISTA ROLÁVEL)
-local _mgui = Instance.new("ScreenGui", _u)
+--====================================================
+-- INTERFACE PRINCIPAL
+--====================================================
+local _mgui = Instance.new("ScreenGui")
 _mgui.Name = "DeltaMain"
 _mgui.Enabled = false
 _mgui.ResetOnSpawn = false
+_mgui.Parent = _u
 
-local _f = Instance.new("Frame", _mgui)
-_f.Size = UDim2.new(0, 240, 0, 420) -- Tamanho ajustado para caber a lista
+local _f = Instance.new("Frame")
+_f.Parent = _mgui -- FIX (garantia explícita)
+_f.Size = UDim2.new(0, 240, 0, 420)
 _f.Position = UDim2.new(0.5, -120, 0.4, 0)
 _f.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 _f.Active = true
 _f.Draggable = true
 
-_btnToggle.MouseButton1Click:Connect(function()
-    _mgui.Enabled = not _mgui.Enabled
-    -- Atualiza a lista sempre que o menu é aberto
-    if _mgui.Enabled then _updateList() end 
-end)
-
--- 3. ABA DE STATUS (TOPO DA UI)
-local _stFrame = Instance.new("Frame", _f)
+--====================================================
+-- STATUS
+--====================================================
+local _stFrame = Instance.new("Frame")
+_stFrame.Parent = _f -- FIX
 _stFrame.Size = UDim2.new(0.9, 0, 0, 60)
-_stFrame.Position = UDim2.new(0.05, 0, 0.03, 0) -- Ajuste de posição
+_stFrame.Position = UDim2.new(0.05, 0, 0.03, 0)
 _stFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 
-local _stText = Instance.new("TextLabel", _stFrame)
+local _stText = Instance.new("TextLabel")
+_stText.Parent = _stFrame -- FIX
 _stText.Size = UDim2.new(1, 0, 1, 0)
 _stText.BackgroundTransparency = 1
 _stText.TextColor3 = Color3.new(1, 1, 1)
 _stText.TextSize = 14
-local _lvl = _p:FindFirstChild("level") or _p:FindFirstChild("Level") or _p:FindFirstChild("leaderstats") and _p.leaderstats:FindFirstChildOfClass("IntValue") or {Value = "N/A"}
+
+local _lvl = _p:FindFirstChild("level")
+    or _p:FindFirstChild("Level")
+    or (_p:FindFirstChild("leaderstats") and _p.leaderstats:FindFirstChildOfClass("IntValue"))
+    or {Value = "N/A"}
+
 _stText.Text = "JOGADOR: " .. _p.Name .. "\nNÍVEL: " .. tostring(_lvl.Value)
 
--- 4. LISTA DE NPCS ROLÁVEL (NO LUGAR DO CLIQUE)
-local _scroll = Instance.new("ScrollingFrame", _f)
-_scroll.Size = UDim2.new(0.9, 0, 0, 200) -- Altura fixa para a lista
+--====================================================
+-- LISTA DE NPCS (SCROLL)
+--====================================================
+local _scroll = Instance.new("ScrollingFrame")
+_scroll.Parent = _f -- FIX
+_scroll.Size = UDim2.new(0.9, 0, 0, 200)
 _scroll.Position = UDim2.new(0.05, 0, 0.18, 0)
 _scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 _scroll.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 
-local _layout = Instance.new("UIListLayout", _scroll)
+local _layout = Instance.new("UIListLayout")
+_layout.Parent = _scroll -- FIX
 _layout.SortOrder = Enum.SortOrder.LayoutOrder
 
--- Função para listar NPCs (Ignora Jogadores)
+--====================================================
+-- FUNÇÃO DE LISTA (INALTERADA)
+--====================================================
 local function _updateList()
-    for _, v in pairs(_scroll:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
+    for _, v in pairs(_scroll:GetChildren()) do
+        if v:IsA("TextButton") then v:Destroy() end
+    end
+
     local count = 0
+
     for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("Humanoid") and obj.Parent:FindFirstChild("HumanoidRootPart") and obj.Parent ~= _p.Character then
-            if not _s.P:GetPlayerFromCharacter(obj.Parent) then -- Filtro final de jogador
-                count = count + 1
-                local btn = Instance.new("TextButton", _scroll)
-                btn.Size = UDim2.new(1, 0, 0, 30)
-                btn.Text = obj.Parent.Name
-                btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-                btn.MouseButton1Click:Connect(function()
-                    _STATE.Target = obj.Parent
-                    _stText.Text = "ALVO: " .. obj.Parent.Name
-                    _stFrame.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
-                end)
-            end
+        if obj:IsA("Humanoid")
+        and obj.Parent:FindFirstChild("HumanoidRootPart")
+        and obj.Parent ~= _p.Character
+        and not _s.P:GetPlayerFromCharacter(obj.Parent) then
+
+            count += 1
+
+            local btn = Instance.new("TextButton")
+            btn.Parent = _scroll -- FIX
+            btn.Size = UDim2.new(1, 0, 0, 30)
+            btn.Text = obj.Parent.Name
+            btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+
+            btn.MouseButton1Click:Connect(function()
+                _STATE.Target = obj.Parent
+                _stText.Text = "ALVO: " .. obj.Parent.Name
+                _stFrame.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+            end)
         end
     end
+
     _scroll.CanvasSize = UDim2.new(0, 0, 0, count * 32)
 end
 
--- 5. BOTÕES DE AÇÃO (MOVIDOS PARA BAIXO DA LISTA)
-local function createBtn(text, pos, color, callback)
-    local b = Instance.new("TextButton", _f)
-    b.Size = UDim2.new(0.9, 0, 0, 40)
-    b.Position = pos
-    b.Text = text
-    b.BackgroundColor3 = color
-    b.TextColor3 = Color3.new(1, 1, 1)
-    b.MouseButton1Click:Connect(function() callback(b) end)
-    return b
-end
-
--- Posições ajustadas para caber abaixo da lista de 200px
-createBtn("2. IR ATÉ (9 STUDS): OFF", UDim2.new(0.05, 0, 0.72, 0), Color3.fromRGB(50, 50, 60), function(b)
-    _STATE.Farm = not _STATE.Farm
-    b.Text = _STATE.Farm and "IR ATÉ: ATIVO" or "2. IR ATÉ (9 STUDS): OFF"
-    b.BackgroundColor3 = _STATE.Farm and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(50, 50, 60)
+--====================================================
+-- TOGGLE MENU
+--====================================================
+_btnToggle.MouseButton1Click:Connect(function()
+    _mgui.Enabled = not _mgui.Enabled
+    if _mgui.Enabled then
+        task.defer(_updateList) -- FIX (garante render)
+    end
 end)
 
-createBtn("3. AUTO ATTACK: OFF", UDim2.new(0.05, 0, 0.82, 0), Color3.fromRGB(50, 50, 60), function(b)
-    _STATE.Atk = not _STATE.Atk
-    b.Text = _STATE.Atk and "ATAQUE: ATIVO" or "3. AUTO ATTACK: OFF"
-    b.BackgroundColor3 = _STATE.Atk and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(50, 50, 60)
-end)
-
-createBtn("FECHAR E LIMPAR TUDO", UDim2.new(0.05, 0, 0.92, 0), Color3.fromRGB(120, 30, 30), function()
-    _STATE.Atk = false
-    _STATE.Farm = false
-    for _, c in pairs(_CONNECTIONS) do if c then c:Disconnect() end end
-    _tgui:Destroy()
-    _mgui:Destroy()
-end)
-
--- 6. LOOP DE EXECUÇÃO (MANTIDO)
+--====================================================
+-- LOOP (INALTERADO)
+--====================================================
 _CONNECTIONS["Loop"] = _s.R.Heartbeat:Connect(function()
     local char = _p.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
 
     if _STATE.Farm and _STATE.Target and _STATE.Target:FindFirstChild("HumanoidRootPart") then
-        char.HumanoidRootPart.CFrame = _STATE.Target.HumanoidRootPart.CFrame * CFrame.new(0, 9, 0)
+        char.HumanoidRootPart.CFrame =
+            _STATE.Target.HumanoidRootPart.CFrame * CFrame.new(0, 9, 0)
     end
 
     if _STATE.Atk and os.clock() - _STATE.LastAtk >= _STATE.Cooldown then
@@ -153,5 +160,5 @@ _CONNECTIONS["Loop"] = _s.R.Heartbeat:Connect(function()
     end
 end)
 
--- Inicializa a lista no primeiro carregamento
+-- PRIMEIRA CARGA
 _updateList()
