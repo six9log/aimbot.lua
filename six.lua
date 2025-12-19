@@ -1,5 +1,5 @@
 --====================================================
--- BLOX FRUITS HUB - STABLE EDUCATIONAL EDITION
+-- BLOX FRUITS HUB - STABLE + FIXED VERSION
 --====================================================
 
 ------------------------
@@ -37,9 +37,13 @@ local STATE = {
         AutoNearest = false,
         AutoChest = false,
         AutoAttack = false,
-        Height = 9,
+
+        Height = 14,          -- MAIS ALTO (ANTI MORTE)
+        BackDistance = -10,   -- MAIS LONGE DO NPC
+
         Target = nil,
-        Chest = nil
+        Chest = nil,
+        ChestStartTime = 0
     }
 }
 
@@ -60,7 +64,7 @@ ToggleUI.BackgroundColor3 = Color3.fromRGB(40,40,50)
 
 -- Main Window
 local Main = Instance.new("Frame", GUI)
-Main.Size = UDim2.new(0,420,0,350)
+Main.Size = UDim2.new(0,420,0,360)
 Main.Position = UDim2.new(0.3,0,0.25,0)
 Main.BackgroundColor3 = Color3.fromRGB(25,25,30)
 Main.Active = true
@@ -120,11 +124,11 @@ createToggle("Auto Attack", 0.51, function()
 end)
 
 ------------------------
--- CLOSE BUTTON
+-- CLOSE SCRIPT
 ------------------------
 local Close = Instance.new("TextButton", Main)
 Close.Size = UDim2.new(0.9,0,0,35)
-Close.Position = UDim2.new(0.05,0,0.75,0)
+Close.Position = UDim2.new(0.05,0,0.78,0)
 Close.Text = "ENCERRAR SCRIPT"
 Close.BackgroundColor3 = Color3.fromRGB(120,30,30)
 
@@ -165,7 +169,7 @@ local function getNearestEnemy()
 end
 
 ------------------------
--- CHESTS
+-- CHESTS (FIXED)
 ------------------------
 local function getNearestChest()
     local best, dist = nil, math.huge
@@ -194,19 +198,30 @@ end
 RunService.Heartbeat:Connect(function()
     if not STATE.Running then return end
 
-    -- CHEST PRIORITY
+    -- =========================
+    -- AUTO CHEST (FIXED)
+    -- =========================
     if STATE.Farm.AutoChest then
         if not STATE.Farm.Chest or not STATE.Farm.Chest.Parent then
             STATE.Farm.Chest = getNearestChest()
+            STATE.Farm.ChestStartTime = os.clock()
+        end
+
+        -- força troca se travar mais de 5s
+        if STATE.Farm.Chest and os.clock() - STATE.Farm.ChestStartTime > 5 then
+            STATE.Farm.Chest = nil
+            return
         end
 
         if STATE.Farm.Chest then
-            moveTo(STATE.Farm.Chest.CFrame * CFrame.new(0,3,0))
+            moveTo(STATE.Farm.Chest.CFrame * CFrame.new(0, 3, 0))
             return
         end
     end
 
-    -- ENEMY FARM
+    -- =========================
+    -- AUTO FARM NPC
+    -- =========================
     if STATE.Farm.AutoLevel or STATE.Farm.AutoNearest then
         if not STATE.Farm.Target
         or STATE.Farm.Target.Humanoid.Health <= 0 then
@@ -215,13 +230,16 @@ RunService.Heartbeat:Connect(function()
     end
 
     if STATE.Farm.Target then
+        local hrp = STATE.Farm.Target.HumanoidRootPart
         moveTo(
-            STATE.Farm.Target.HumanoidRootPart.CFrame *
-            CFrame.new(0, STATE.Farm.Height, 0)
+            hrp.CFrame
+            * CFrame.new(0, STATE.Farm.Height, STATE.Farm.BackDistance)
         )
     end
 
-    -- ATTACK
+    -- =========================
+    -- AUTO ATTACK
+    -- =========================
     if STATE.Farm.AutoAttack then
         local tool = character:FindFirstChildOfClass("Tool")
         if tool then tool:Activate() end
