@@ -1,5 +1,5 @@
 --====================================================
--- DELTA NPC FARM - VERSÃO ESTÁVEL
+-- DELTA NPC FARM - MENU CONTROLADO
 --====================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,12 +7,12 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local guiParent = player:WaitForChild("PlayerGui")
 
--- Limpeza
+-- LIMPEZA
 if guiParent:FindFirstChild("DeltaToggle") then guiParent.DeltaToggle:Destroy() end
 if guiParent:FindFirstChild("DeltaMain") then guiParent.DeltaMain:Destroy() end
 
 --====================================================
--- ESTADO
+-- ESTADOS
 --====================================================
 local STATE = {
     Farm = false,
@@ -20,6 +20,11 @@ local STATE = {
     Target = nil,
     Cooldown = 0.4,
     LastAttack = 0
+}
+
+local UI_STATE = {
+    Open = false,
+    NPCTab = false
 }
 
 local Connections = {}
@@ -46,7 +51,7 @@ mainGui.Enabled = false
 mainGui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame", mainGui)
-frame.Size = UDim2.new(0, 260, 0, 460)
+frame.Size = UDim2.new(0, 260, 0, 480)
 frame.Position = UDim2.new(0.5, -130, 0.35, 0)
 frame.BackgroundColor3 = Color3.fromRGB(15,15,20)
 frame.Active = true
@@ -81,7 +86,7 @@ local function createButton(text, y)
 end
 
 --====================================================
--- BOTÕES DE FUNÇÃO
+-- BOTÕES FARM / ATTACK
 --====================================================
 local farmBtn = createButton("AUTO FARM: OFF", 0.17)
 local atkBtn  = createButton("AUTO ATTACK: OFF", 0.25)
@@ -99,21 +104,29 @@ atkBtn.MouseButton1Click:Connect(function()
 end)
 
 --====================================================
--- LISTA DE NPCs
+-- ABA NPCs ATACÁVEIS
 --====================================================
-local scroll = Instance.new("ScrollingFrame", frame)
-scroll.Size = UDim2.new(0.9, 0, 0, 170)
-scroll.Position = UDim2.new(0.05, 0, 0.35, 0)
-scroll.CanvasSize = UDim2.new(0,0,0,0)
-scroll.ScrollBarImageTransparency = 0.2
-scroll.BackgroundColor3 = Color3.fromRGB(30,30,35)
-scroll.ZIndex = 1
+local npcTabBtn = createButton("NPCs ATACÁVEIS ▶", 0.33)
 
-local layout = Instance.new("UIListLayout", scroll)
-layout.Padding = UDim.new(0,4)
+local npcTab = Instance.new("Frame", frame)
+npcTab.Size = UDim2.new(0.9, 0, 0, 170)
+npcTab.Position = UDim2.new(0.05, 0, 0.40, 0)
+npcTab.BackgroundColor3 = Color3.fromRGB(25,25,30)
+npcTab.Visible = false
+npcTab.ZIndex = 4
 
-local function updateNPCList()
-    for _,v in pairs(scroll:GetChildren()) do
+local npcScroll = Instance.new("ScrollingFrame", npcTab)
+npcScroll.Size = UDim2.new(1, -10, 1, -10)
+npcScroll.Position = UDim2.new(0, 5, 0, 5)
+npcScroll.CanvasSize = UDim2.new(0,0,0,0)
+npcScroll.ScrollBarImageTransparency = 0.2
+npcScroll.BackgroundTransparency = 1
+
+local npcLayout = Instance.new("UIListLayout", npcScroll)
+npcLayout.Padding = UDim.new(0,4)
+
+local function updateAttackableNPCs()
+    for _,v in pairs(npcScroll:GetChildren()) do
         if v:IsA("TextButton") then v:Destroy() end
     end
 
@@ -121,30 +134,44 @@ local function updateNPCList()
 
     for _,obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("Humanoid")
+        and obj.Health > 0
+        and obj.Parent
         and obj.Parent:FindFirstChild("HumanoidRootPart")
         and obj.Parent ~= player.Character
         and not Players:GetPlayerFromCharacter(obj.Parent) then
 
             count += 1
-            local btn = Instance.new("TextButton", scroll)
-            btn.Size = UDim2.new(1,0,0,30)
+            local btn = Instance.new("TextButton", npcScroll)
+            btn.Size = UDim2.new(1,0,0,28)
             btn.Text = obj.Parent.Name
-            btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
             btn.TextColor3 = Color3.new(1,1,1)
+            btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
 
             btn.MouseButton1Click:Connect(function()
                 STATE.Target = obj.Parent
                 statusText.Text = "ALVO: "..obj.Parent.Name
-                statusFrame.BackgroundColor3 = Color3.fromRGB(0,100,0)
+                statusFrame.BackgroundColor3 = Color3.fromRGB(0,120,0)
             end)
         end
     end
 
-    scroll.CanvasSize = UDim2.new(0,0,0,count*34)
+    npcScroll.CanvasSize = UDim2.new(0,0,0,count*32)
 end
 
+npcTabBtn.MouseButton1Click:Connect(function()
+    if not UI_STATE.Open then return end
+
+    UI_STATE.NPCTab = not UI_STATE.NPCTab
+    npcTab.Visible = UI_STATE.NPCTab
+    npcTabBtn.Text = UI_STATE.NPCTab and "NPCs ATACÁVEIS ▼" or "NPCs ATACÁVEIS ▶"
+
+    if UI_STATE.NPCTab then
+        task.defer(updateAttackableNPCs)
+    end
+end)
+
 --====================================================
--- FECHAR TUDO
+-- FECHAR SCRIPT
 --====================================================
 local closeBtn = createButton("FECHAR SCRIPT", 0.88)
 closeBtn.BackgroundColor3 = Color3.fromRGB(100,30,30)
@@ -158,12 +185,18 @@ closeBtn.MouseButton1Click:Connect(function()
 end)
 
 --====================================================
--- TOGGLE MENU
+-- MENU TOGGLE (CONTROLA TUDO)
 --====================================================
 toggleBtn.MouseButton1Click:Connect(function()
-    mainGui.Enabled = not mainGui.Enabled
-    if mainGui.Enabled then
-        task.defer(updateNPCList)
+    UI_STATE.Open = not UI_STATE.Open
+    mainGui.Enabled = UI_STATE.Open
+
+    if not UI_STATE.Open then
+        UI_STATE.NPCTab = false
+        npcTab.Visible = false
+        npcTabBtn.Text = "NPCs ATACÁVEIS ▶"
+    else
+        task.defer(updateAttackableNPCs)
     end
 end)
 
@@ -190,6 +223,3 @@ Connections.Main = RunService.Heartbeat:Connect(function()
         end
     end
 end)
-
--- Primeira carga
-updateNPCList()
