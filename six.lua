@@ -1,71 +1,111 @@
 --====================================================
--- DELTA NPC FARM - VERSÃO MELHORADA
+-- AUTO FARM + AUTO ATTACK + NPC SELECTOR (EDUCACIONAL)
 --====================================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
-local guiParent = player:WaitForChild("PlayerGui")
+local character = player.Character or player.CharacterAdded:Wait()
+local root = character:WaitForChild("HumanoidRootPart")
 
--- LIMPEZA
-for _,n in pairs({"DeltaToggle","DeltaMain"}) do
-    if guiParent:FindFirstChild(n) then
-        guiParent[n]:Destroy()
-    end
-end
-
---====================================================
--- ESTADOS
---====================================================
+--========================
+-- ESTADO
+--========================
 local STATE = {
-    Farm = false,
-    Attack = false,
+    AutoFarm = false,
+    AutoAttack = false,
     Target = nil,
-    Cooldown = 0.4,
-    LastAttack = 0
+    Height = 9,
+    Cooldown = 0.35,
+    LastHit = 0,
+    MenuOpen = true,
+    NPCListOpen = false
 }
 
-local UI_STATE = {
-    Open = false,
-    NPCTab = false
-}
+--========================
+-- UI BASE
+--========================
+local gui = Instance.new("ScreenGui")
+gui.Name = "FarmUI"
+gui.Parent = player:WaitForChild("PlayerGui")
 
-local Connections = {}
-local currentHighlight
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 260, 0, 420)
+frame.Position = UDim2.new(0.5, -130, 0.35, 0)
+frame.BackgroundColor3 = Color3.fromRGB(20,20,25)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
 
---====================================================
--- FUNÇÕES ÚTEIS
---====================================================
-local function clearHighlight()
-    if currentHighlight then
-        currentHighlight:Destroy()
-        currentHighlight = nil
-    end
+--========================
+-- TÍTULO / ALVO
+--========================
+local targetLabel = Instance.new("TextLabel", frame)
+targetLabel.Size = UDim2.new(1, -10, 0, 40)
+targetLabel.Position = UDim2.new(0, 5, 0, 5)
+targetLabel.BackgroundColor3 = Color3.fromRGB(40,40,45)
+targetLabel.TextColor3 = Color3.new(1,1,1)
+targetLabel.Text = "ALVO: nenhum"
+targetLabel.BorderSizePixel = 0
+
+--========================
+-- BOTÕES
+--========================
+local function makeButton(text, y)
+    local b = Instance.new("TextButton", frame)
+    b.Size = UDim2.new(1, -10, 0, 40)
+    b.Position = UDim2.new(0, 5, 0, y)
+    b.Text = text
+    b.BackgroundColor3 = Color3.fromRGB(120,40,40)
+    b.TextColor3 = Color3.new(1,1,1)
+    b.BorderSizePixel = 0
+    return b
 end
 
-local function highlightTarget(model)
-    clearHighlight()
-    if model then
-        local h = Instance.new("Highlight")
-        h.FillColor = Color3.fromRGB(255, 0, 0)
-        h.OutlineColor = Color3.new(1,1,1)
-        h.Adornee = model
-        h.Parent = model
-        currentHighlight = h
-    end
-end
+local farmBtn   = makeButton("AUTO FARM: OFF", 55)
+local atkBtn    = makeButton("AUTO ATTACK: OFF", 100)
+local npcBtn    = makeButton("NPCs ATACÁVEIS ▼", 145)
 
-local function getAttackableNPCs()
+--========================
+-- LISTA DE NPCs
+--========================
+local npcFrame = Instance.new("ScrollingFrame", frame)
+npcFrame.Size = UDim2.new(1, -10, 0, 160)
+npcFrame.Position = UDim2.new(0, 5, 0, 190)
+npcFrame.CanvasSize = UDim2.new(0,0,0,0)
+npcFrame.ScrollBarImageTransparency = 0.2
+npcFrame.Visible = false
+npcFrame.BackgroundColor3 = Color3.fromRGB(25,25,30)
+npcFrame.BorderSizePixel = 0
+
+local layout = Instance.new("UIListLayout", npcFrame)
+layout.Padding = UDim.new(0,5)
+
+--========================
+-- FECHAR SCRIPT (FIXADO)
+--========================
+local closeBtn = makeButton("FECHAR SCRIPT", 360)
+closeBtn.BackgroundColor3 = Color3.fromRGB(120,30,30)
+
+closeBtn.MouseButton1Click:Connect(function()
+    STATE.AutoFarm = false
+    STATE.AutoAttack = false
+    gui:Destroy()
+end)
+
+--========================
+-- NPC DETECTION
+--========================
+local function getNPCs()
     local list = {}
-    for _,obj in pairs(workspace:GetChildren()) do
+    for _,obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Model")
-        and obj ~= player.Character
+        and obj ~= character
         and not Players:GetPlayerFromCharacter(obj) then
-
             local hum = obj:FindFirstChildOfClass("Humanoid")
-            local root = obj:FindFirstChild("HumanoidRootPart")
-
-            if hum and root and hum.Health > 0 then
+            local hrp = obj:FindFirstChild("HumanoidRootPart")
+            if hum and hrp and hum.Health > 0 then
                 table.insert(list, obj)
             end
         end
@@ -73,182 +113,68 @@ local function getAttackableNPCs()
     return list
 end
 
-local function getClosestNPC()
-    local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+local function refreshNPCs()
+    npcFrame:ClearAllChildren()
+    layout.Parent = npcFrame
 
-    local root = char.HumanoidRootPart
-    local closest, dist = nil, math.huge
+    local npcs = getNPCs()
+    for _,npc in ipairs(npcs) do
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, -5, 0, 35)
+        b.Text = npc.Name
+        b.BackgroundColor3 = Color3.fromRGB(50,50,55)
+        b.TextColor3 = Color3.new(1,1,1)
+        b.BorderSizePixel = 0
+        b.Parent = npcFrame
 
-    for _,npc in pairs(getAttackableNPCs()) do
-        local d = (root.Position - npc.HumanoidRootPart.Position).Magnitude
-        if d < dist then
-            dist = d
-            closest = npc
-        end
-    end
-    return closest
-end
-
---====================================================
--- GUI MENU
---====================================================
-local toggleGui = Instance.new("ScreenGui", guiParent)
-toggleGui.Name = "DeltaToggle"
-
-local toggleBtn = Instance.new("TextButton", toggleGui)
-toggleBtn.Size = UDim2.new(0,50,0,50)
-toggleBtn.Position = UDim2.new(0,15,0.5,-25)
-toggleBtn.Text = "MENU"
-toggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,35)
-toggleBtn.TextColor3 = Color3.new(1,1,1)
-
-local mainGui = Instance.new("ScreenGui", guiParent)
-mainGui.Name = "DeltaMain"
-mainGui.Enabled = false
-
-local frame = Instance.new("Frame", mainGui)
-frame.Size = UDim2.new(0,260,0,480)
-frame.Position = UDim2.new(0.5,-130,0.35,0)
-frame.BackgroundColor3 = Color3.fromRGB(15,15,20)
-frame.Active = true
-frame.Draggable = true
-
---====================================================
--- STATUS
---====================================================
-local statusFrame = Instance.new("Frame", frame)
-statusFrame.Size = UDim2.new(0.9,0,0,55)
-statusFrame.Position = UDim2.new(0.05,0,0.03,0)
-statusFrame.BackgroundColor3 = Color3.fromRGB(35,35,45)
-
-local statusText = Instance.new("TextLabel", statusFrame)
-statusText.Size = UDim2.new(1,0,1,0)
-statusText.BackgroundTransparency = 1
-statusText.TextColor3 = Color3.new(1,1,1)
-statusText.Text = "ALVO: nenhum"
-
---====================================================
--- FUNÇÃO BOTÃO
---====================================================
-local function createButton(text, y)
-    local b = Instance.new("TextButton", frame)
-    b.Size = UDim2.new(0.9,0,0,35)
-    b.Position = UDim2.new(0.05,0,y,0)
-    b.Text = text
-    b.TextColor3 = Color3.new(1,1,1)
-    b.BackgroundColor3 = Color3.fromRGB(120,40,40)
-    return b
-end
-
-local farmBtn = createButton("AUTO FARM: OFF", 0.17)
-local atkBtn  = createButton("AUTO ATTACK: OFF", 0.25)
-local npcBtn  = createButton("NPCs ATACÁVEIS ▶", 0.33)
-
-farmBtn.MouseButton1Click:Connect(function()
-    STATE.Farm = not STATE.Farm
-    farmBtn.Text = STATE.Farm and "AUTO FARM: ON" or "AUTO FARM: OFF"
-    farmBtn.BackgroundColor3 = STATE.Farm and Color3.fromRGB(40,120,40) or Color3.fromRGB(120,40,40)
-end)
-
-atkBtn.MouseButton1Click:Connect(function()
-    STATE.Attack = not STATE.Attack
-    atkBtn.Text = STATE.Attack and "AUTO ATTACK: ON" or "AUTO ATTACK: OFF"
-    atkBtn.BackgroundColor3 = STATE.Attack and Color3.fromRGB(40,120,40) or Color3.fromRGB(120,40,40)
-end)
-
---====================================================
--- ABA NPC
---====================================================
-local npcTab = Instance.new("Frame", frame)
-npcTab.Size = UDim2.new(0.9,0,0,170)
-npcTab.Position = UDim2.new(0.05,0,0.40,0)
-npcTab.BackgroundColor3 = Color3.fromRGB(25,25,30)
-npcTab.Visible = false
-
-local npcScroll = Instance.new("ScrollingFrame", npcTab)
-npcScroll.Size = UDim2.new(1,-10,1,-10)
-npcScroll.Position = UDim2.new(0,5,0,5)
-npcScroll.CanvasSize = UDim2.new(0,0,0,0)
-npcScroll.BackgroundTransparency = 1
-
-local layout = Instance.new("UIListLayout", npcScroll)
-
-local function updateNPCList()
-    for _,v in pairs(npcScroll:GetChildren()) do
-        if v:IsA("TextButton") then v:Destroy() end
-    end
-
-    local list = getAttackableNPCs()
-    for _,npc in pairs(list) do
-        local btn = Instance.new("TextButton", npcScroll)
-        btn.Size = UDim2.new(1,0,0,30)
-        btn.Text = npc.Name
-        btn.TextColor3 = Color3.new(1,1,1)
-        btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
-
-        btn.MouseButton1Click:Connect(function()
+        b.MouseButton1Click:Connect(function()
             STATE.Target = npc
-            statusText.Text = "ALVO: "..npc.Name
-            highlightTarget(npc)
+            targetLabel.Text = "ALVO: "..npc.Name
         end)
     end
 
-    npcScroll.CanvasSize = UDim2.new(0,0,0,#list*34)
+    npcFrame.CanvasSize = UDim2.new(0,0,0,#npcs * 40)
 end
 
+--========================
+-- BOTÕES FUNCIONAIS
+--========================
+farmBtn.MouseButton1Click:Connect(function()
+    STATE.AutoFarm = not STATE.AutoFarm
+    farmBtn.Text = STATE.AutoFarm and "AUTO FARM: ON" or "AUTO FARM: OFF"
+    farmBtn.BackgroundColor3 = STATE.AutoFarm and Color3.fromRGB(40,120,40) or Color3.fromRGB(120,40,40)
+end)
+
+atkBtn.MouseButton1Click:Connect(function()
+    STATE.AutoAttack = not STATE.AutoAttack
+    atkBtn.Text = STATE.AutoAttack and "AUTO ATTACK: ON" or "AUTO ATTACK: OFF"
+    atkBtn.BackgroundColor3 = STATE.AutoAttack and Color3.fromRGB(40,120,40) or Color3.fromRGB(120,40,40)
+end)
+
 npcBtn.MouseButton1Click:Connect(function()
-    if not UI_STATE.Open then return end
-    UI_STATE.NPCTab = not UI_STATE.NPCTab
-    npcTab.Visible = UI_STATE.NPCTab
-    npcBtn.Text = UI_STATE.NPCTab and "NPCs ATACÁVEIS ▼" or "NPCs ATACÁVEIS ▶"
-    if UI_STATE.NPCTab then updateNPCList() end
-end)
-
---====================================================
--- MENU TOGGLE
---====================================================
-toggleBtn.MouseButton1Click:Connect(function()
-    UI_STATE.Open = not UI_STATE.Open
-    mainGui.Enabled = UI_STATE.Open
-    if not UI_STATE.Open then
-        UI_STATE.NPCTab = false
-        npcTab.Visible = false
-        npcBtn.Text = "NPCs ATACÁVEIS ▶"
+    STATE.NPCListOpen = not STATE.NPCListOpen
+    npcFrame.Visible = STATE.NPCListOpen
+    npcBtn.Text = STATE.NPCListOpen and "NPCs ATACÁVEIS ▲" or "NPCs ATACÁVEIS ▼"
+    if STATE.NPCListOpen then
+        refreshNPCs()
     end
 end)
 
---====================================================
+--========================
 -- LOOP PRINCIPAL
---====================================================
-Connections.Main = RunService.Heartbeat:Connect(function()
-    local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    local root = char.HumanoidRootPart
+--========================
+RunService.Heartbeat:Connect(function()
+    if not STATE.AutoFarm or not STATE.Target then return end
+    if not STATE.Target:FindFirstChild("HumanoidRootPart") then return end
 
-    if STATE.Farm then
-        if not STATE.Target then
-            STATE.Target = getClosestNPC()
-            if STATE.Target then
-                statusText.Text = "ALVO: "..STATE.Target.Name
-                highlightTarget(STATE.Target)
-            end
-        end
+    local targetPos = STATE.Target.HumanoidRootPart.CFrame * CFrame.new(0, STATE.Height, 0)
+    root.CFrame = root.CFrame:Lerp(targetPos, 0.15)
 
-        if STATE.Target and STATE.Target:FindFirstChild("HumanoidRootPart") then
-            root.CFrame = root.CFrame:Lerp(
-                STATE.Target.HumanoidRootPart.CFrame * CFrame.new(0,9,0),
-                0.15
-            )
-        end
-    end
-
-    if STATE.Attack and os.clock() - STATE.LastAttack >= STATE.Cooldown then
-        local tool = char:FindFirstChildOfClass("Tool") or player.Backpack:FindFirstChildOfClass("Tool")
-        if tool then
-            tool.Parent = char
+    if STATE.AutoAttack then
+        local tool = character:FindFirstChildOfClass("Tool")
+        if tool and os.clock() - STATE.LastHit >= STATE.Cooldown then
             tool:Activate()
-            STATE.LastAttack = os.clock()
+            STATE.LastHit = os.clock()
         end
     end
 end)
