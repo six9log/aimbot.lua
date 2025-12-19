@@ -10,10 +10,11 @@ local _s = {
 local _p = _s.P.LocalPlayer
 local _u = _p:WaitForChild("PlayerGui")
 
--- Limpeza de instâncias anteriores
+-- Limpeza
 if _u:FindFirstChild("DeltaToggle") then _u.DeltaToggle:Destroy() end
 if _u:FindFirstChild("DeltaMain") then _u.DeltaMain:Destroy() end
 
+-- Estado
 local _STATE = {
     Atk = false,
     Farm = false,
@@ -25,33 +26,29 @@ local _STATE = {
 local _CONNECTIONS = {}
 
 --====================================================
--- BOTÃO QUADRADO (TOGGLE)
+-- BOTÃO MENU (FLUTUANTE)
 --====================================================
-local _tgui = Instance.new("ScreenGui")
+local _tgui = Instance.new("ScreenGui", _u)
 _tgui.Name = "DeltaToggle"
-_tgui.Parent = _u
 
-local _btnToggle = Instance.new("TextButton")
-_btnToggle.Parent = _tgui
+local _btnToggle = Instance.new("TextButton", _tgui)
 _btnToggle.Size = UDim2.new(0, 50, 0, 50)
 _btnToggle.Position = UDim2.new(0, 15, 0.5, -25)
-_btnToggle.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 _btnToggle.Text = "MENU"
-_btnToggle.TextColor3 = Color3.new(1, 1, 1)
+_btnToggle.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+_btnToggle.TextColor3 = Color3.new(1,1,1)
 
 --====================================================
 -- INTERFACE PRINCIPAL
 --====================================================
-local _mgui = Instance.new("ScreenGui")
+local _mgui = Instance.new("ScreenGui", _u)
 _mgui.Name = "DeltaMain"
 _mgui.Enabled = false
 _mgui.ResetOnSpawn = false
-_mgui.Parent = _u
 
-local _f = Instance.new("Frame")
-_f.Parent = _mgui -- FIX (garantia explícita)
-_f.Size = UDim2.new(0, 240, 0, 420)
-_f.Position = UDim2.new(0.5, -120, 0.4, 0)
+local _f = Instance.new("Frame", _mgui)
+_f.Size = UDim2.new(0, 240, 0, 480)
+_f.Position = UDim2.new(0.5, -120, 0.35, 0)
 _f.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 _f.Active = true
 _f.Draggable = true
@@ -59,87 +56,108 @@ _f.Draggable = true
 --====================================================
 -- STATUS
 --====================================================
-local _stFrame = Instance.new("Frame")
-_stFrame.Parent = _f -- FIX
+local _stFrame = Instance.new("Frame", _f)
 _stFrame.Size = UDim2.new(0.9, 0, 0, 60)
 _stFrame.Position = UDim2.new(0.05, 0, 0.03, 0)
 _stFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 
-local _stText = Instance.new("TextLabel")
-_stText.Parent = _stFrame -- FIX
+local _stText = Instance.new("TextLabel", _stFrame)
 _stText.Size = UDim2.new(1, 0, 1, 0)
 _stText.BackgroundTransparency = 1
-_stText.TextColor3 = Color3.new(1, 1, 1)
-_stText.TextSize = 14
-
-local _lvl = _p:FindFirstChild("level")
-    or _p:FindFirstChild("Level")
-    or (_p:FindFirstChild("leaderstats") and _p.leaderstats:FindFirstChildOfClass("IntValue"))
-    or {Value = "N/A"}
-
-_stText.Text = "JOGADOR: " .. _p.Name .. "\nNÍVEL: " .. tostring(_lvl.Value)
+_stText.TextColor3 = Color3.new(1,1,1)
+_stText.Text = "ALVO: nenhum"
 
 --====================================================
--- LISTA DE NPCS (SCROLL)
+-- BOTÕES FARM / ATTACK
 --====================================================
-local _scroll = Instance.new("ScrollingFrame")
-_scroll.Parent = _f -- FIX
+local function createButton(text, y)
+    local b = Instance.new("TextButton", _f)
+    b.Size = UDim2.new(0.9, 0, 0, 35)
+    b.Position = UDim2.new(0.05, 0, y, 0)
+    b.Text = text
+    b.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
+    b.TextColor3 = Color3.new(1,1,1)
+    return b
+end
+
+local _btnFarm = createButton("AUTO FARM: OFF", 0.18)
+local _btnAtk  = createButton("AUTO ATTACK: OFF", 0.26)
+
+_btnFarm.MouseButton1Click:Connect(function()
+    _STATE.Farm = not _STATE.Farm
+    _btnFarm.Text = _STATE.Farm and "AUTO FARM: ON" or "AUTO FARM: OFF"
+    _btnFarm.BackgroundColor3 = _STATE.Farm and Color3.fromRGB(40,120,40) or Color3.fromRGB(120,40,40)
+end)
+
+_btnAtk.MouseButton1Click:Connect(function()
+    _STATE.Atk = not _STATE.Atk
+    _btnAtk.Text = _STATE.Atk and "AUTO ATTACK: ON" or "AUTO ATTACK: OFF"
+    _btnAtk.BackgroundColor3 = _STATE.Atk and Color3.fromRGB(40,120,40) or Color3.fromRGB(120,40,40)
+end)
+
+--====================================================
+-- LISTA DE NPCs
+--====================================================
+local _scroll = Instance.new("ScrollingFrame", _f)
 _scroll.Size = UDim2.new(0.9, 0, 0, 200)
-_scroll.Position = UDim2.new(0.05, 0, 0.18, 0)
-_scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-_scroll.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+_scroll.Position = UDim2.new(0.05, 0, 0.35, 0)
+_scroll.CanvasSize = UDim2.new(0,0,0,0)
+_scroll.BackgroundColor3 = Color3.fromRGB(30,30,35)
 
-local _layout = Instance.new("UIListLayout")
-_layout.Parent = _scroll -- FIX
-_layout.SortOrder = Enum.SortOrder.LayoutOrder
+local _layout = Instance.new("UIListLayout", _scroll)
 
---====================================================
--- FUNÇÃO DE LISTA (INALTERADA)
---====================================================
 local function _updateList()
-    for _, v in pairs(_scroll:GetChildren()) do
+    for _,v in pairs(_scroll:GetChildren()) do
         if v:IsA("TextButton") then v:Destroy() end
     end
 
     local count = 0
 
-    for _, obj in pairs(workspace:GetDescendants()) do
+    for _,obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("Humanoid")
         and obj.Parent:FindFirstChild("HumanoidRootPart")
         and obj.Parent ~= _p.Character
         and not _s.P:GetPlayerFromCharacter(obj.Parent) then
 
             count += 1
-
-            local btn = Instance.new("TextButton")
-            btn.Parent = _scroll -- FIX
-            btn.Size = UDim2.new(1, 0, 0, 30)
+            local btn = Instance.new("TextButton", _scroll)
+            btn.Size = UDim2.new(1,0,0,30)
             btn.Text = obj.Parent.Name
-            btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
 
             btn.MouseButton1Click:Connect(function()
                 _STATE.Target = obj.Parent
                 _stText.Text = "ALVO: " .. obj.Parent.Name
-                _stFrame.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+                _stFrame.BackgroundColor3 = Color3.fromRGB(0,100,0)
             end)
         end
     end
 
-    _scroll.CanvasSize = UDim2.new(0, 0, 0, count * 32)
+    _scroll.CanvasSize = UDim2.new(0,0,0,count*32)
 end
+
+--====================================================
+-- FECHAR TUDO
+--====================================================
+local _btnClose = createButton("FECHAR SCRIPT", 0.88)
+_btnClose.MouseButton1Click:Connect(function()
+    for _,c in pairs(_CONNECTIONS) do
+        if c then c:Disconnect() end
+    end
+    _tgui:Destroy()
+    _mgui:Destroy()
+end)
 
 --====================================================
 -- TOGGLE MENU
 --====================================================
 _btnToggle.MouseButton1Click:Connect(function()
     _mgui.Enabled = not _mgui.Enabled
-    if _mgui.Enabled then
-        task.defer(_updateList) -- FIX (garante render)
-    end
+    if _mgui.Enabled then task.defer(_updateList) end
 end)
 
 --====================================================
--- LOOP (INALTERADO)
+-- LOOP PRINCIPAL
 --====================================================
 _CONNECTIONS["Loop"] = _s.R.Heartbeat:Connect(function()
     local char = _p.Character
@@ -153,12 +171,11 @@ _CONNECTIONS["Loop"] = _s.R.Heartbeat:Connect(function()
     if _STATE.Atk and os.clock() - _STATE.LastAtk >= _STATE.Cooldown then
         local tool = char:FindFirstChildOfClass("Tool") or _p.Backpack:FindFirstChildOfClass("Tool")
         if tool then
-            if tool.Parent ~= char then tool.Parent = char end
+            tool.Parent = char
             tool:Activate()
             _STATE.LastAtk = os.clock()
         end
     end
 end)
 
--- PRIMEIRA CARGA
 _updateList()
