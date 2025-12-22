@@ -1,138 +1,197 @@
 --====================================================
--- BLOX FRUITS HUB - VERSÃO ESTUDO (FIXED AUTO-ATTACK)
+-- BLOX FRUITS HUB - STABLE + FIXED VERSION (ATAQUE FIX)
 --====================================================
 
+------------------------
+-- SERVICES
+------------------------
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local VIM = game:GetService("VirtualInputManager") -- Para simular cliques reais
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+------------------------
+-- PLAYER
+------------------------
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local root = character:WaitForChild("HumanoidRootPart")
-local humanoid = character:WaitForChild("Humanoid")
 
--- Atualiza referências quando o player morre
+-- Referência do Evento de Dano do Blox Fruits
+local RigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent")
+
 player.CharacterAdded:Connect(function(char)
     character = char
     root = char:WaitForChild("HumanoidRootPart")
-    humanoid = char:WaitForChild("Humanoid")
 end)
 
 ------------------------
--- ESTADO E CONFIGURAÇÃO
+-- CLEAN UI
+------------------------
+if player.PlayerGui:FindFirstChild("BF_HUB") then
+    player.PlayerGui.BF_HUB:Destroy()
+end
+
+------------------------
+-- STATE
 ------------------------
 local STATE = {
     Running = true,
-    Weapon = "Combat", -- Mude para o nome da sua arma (ex: "Ice Fruit", "Katana")
     Farm = {
         AutoLevel = false,
+        AutoNearest = false,
+        AutoChest = false,
         AutoAttack = false,
-        Height = 12,
-        Distance = -8,
-        Target = nil
+        KillAura = false, -- ADICIONADO
+
+        Height = 14,          
+        BackDistance = -10,   
+        AuraRange = 50, -- Alcance da Kill Aura
+
+        Target = nil,
+        Chest = nil,
+        ChestStartTime = 0
     }
 }
 
 ------------------------
--- UI SIMPLES
+-- UI
 ------------------------
 local GUI = Instance.new("ScreenGui", player.PlayerGui)
-GUI.Name = "BF_HUB_FIXED"
+GUI.Name = "BF_HUB"
+GUI.ResetOnSpawn = false
 
+-- Toggle Button
+local ToggleUI = Instance.new("TextButton", GUI)
+ToggleUI.Size = UDim2.new(0,50,0,50)
+ToggleUI.Position = UDim2.new(0,20,0.5,-25)
+ToggleUI.Text = "☰"
+ToggleUI.TextSize = 22
+ToggleUI.BackgroundColor3 = Color3.fromRGB(40,40,50)
+
+-- Main Window
 local Main = Instance.new("Frame", GUI)
-Main.Size = UDim2.new(0, 250, 0, 200)
-Main.Position = UDim2.new(0.4, 0, 0.4, 0)
-Main.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+Main.Size = UDim2.new(0,420,0,400) -- Aumentado para caber Kill Aura
+Main.Position = UDim2.new(0.3,0,0.25,0)
+Main.BackgroundColor3 = Color3.fromRGB(25,25,30)
 Main.Active = true
 Main.Draggable = true
 
+ToggleUI.MouseButton1Click:Connect(function()
+    Main.Visible = not Main.Visible
+end)
+
+-- Title
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1,0,0,40)
+Title.Text = "Blox Fruits Hub - Dev Mode"
+Title.TextColor3 = Color3.new(1,1,1)
+Title.BackgroundColor3 = Color3.fromRGB(30,30,40)
+
+------------------------
+-- BUTTON FACTORY
+------------------------
 local function createToggle(text, y, callback)
     local btn = Instance.new("TextButton", Main)
-    btn.Size = UDim2.new(0.9, 0, 0, 40)
-    btn.Position = UDim2.new(0.05, 0, 0, y)
-    btn.Text = text .. " : OFF"
-    btn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-    
+    btn.Size = UDim2.new(0.9,0,0,35)
+    btn.Position = UDim2.new(0.05,0,y,0)
+    btn.Text = text.." : OFF"
+    btn.BackgroundColor3 = Color3.fromRGB(150,50,50)
+
     btn.MouseButton1Click:Connect(function()
-        local s = callback()
-        btn.Text = text .. " : " .. (s and "ON" or "OFF")
-        btn.BackgroundColor3 = s and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(150, 50, 50)
+        local state = callback()
+        btn.Text = text.." : "..(state and "ON" or "OFF")
+        btn.BackgroundColor3 = state and Color3.fromRGB(50,150,50)
+            or Color3.fromRGB(150,50,50)
     end)
 end
 
-createToggle("Auto Farm", 20, function() 
-    STATE.Farm.AutoLevel = not STATE.Farm.AutoLevel 
-    return STATE.Farm.AutoLevel 
-end)
-
-createToggle("Auto Attack", 70, function() 
-    STATE.Farm.AutoAttack = not STATE.Farm.AutoAttack 
-    return STATE.Farm.AutoAttack 
-end)
+------------------------
+-- TOGGLES
+------------------------
+createToggle("Auto Farm Level", 0.15, function() STATE.Farm.AutoLevel = not STATE.Farm.AutoLevel return STATE.Farm.AutoLevel end)
+createToggle("Auto Farm Nearest", 0.27, function() STATE.Farm.AutoNearest = not STATE.Farm.AutoNearest return STATE.Farm.AutoNearest end)
+createToggle("Auto Farm Chest", 0.39, function() STATE.Farm.AutoChest = not STATE.Farm.AutoChest STATE.Farm.Chest = nil return STATE.Farm.AutoChest end)
+createToggle("Auto Attack", 0.51, function() STATE.Farm.AutoAttack = not STATE.Farm.AutoAttack return STATE.Farm.AutoAttack end)
+createToggle("KILL AURA (Dano)", 0.63, function() STATE.Farm.KillAura = not STATE.Farm.KillAura return STATE.Farm.KillAura end)
 
 ------------------------
--- LÓGICA DE COMBATE
+-- AUXILIARES
 ------------------------
+local function getEnemies()
+    local list = {}
+    local folder = workspace:FindFirstChild("Enemies")
+    if not folder then return list end
+    for _,m in ipairs(folder:GetChildren()) do
+        if m:IsA("Model") and m:FindFirstChild("Humanoid") and m:FindFirstChild("HumanoidRootPart") and m.Humanoid.Health > 0 then
+            table.insert(list, m)
+        end
+    end
+    return list
+end
 
--- Função para equipar a arma automaticamente
 local function equipWeapon()
-    if character:FindFirstChildOfClass("Tool") then return end -- Já está com arma na mão
-    
-    local tool = player.Backpack:FindFirstChild(STATE.Weapon) or player.Backpack:FindFirstChildOfClass("Tool")
-    if tool then
-        humanoid:EquipTool(tool)
+    if not character:FindFirstChildOfClass("Tool") then
+        local tool = player.Backpack:FindFirstChildOfClass("Tool")
+        if tool then character.Humanoid:EquipTool(tool) end
     end
 end
 
--- Função para atacar (Simulando clique e enviando sinal ao servidor)
-local function doAttack()
-    -- 1. Tenta equipar
-    equipWeapon()
-    
-    -- 2. Ativa a ferramenta (Lógica Local)
-    local tool = character:FindFirstChildOfClass("Tool")
-    if tool then
-        tool:Activate()
-        -- 3. Simula clique do mouse para o Anti-Cheat do jogo entender como input humano
-        VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-        VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-    end
-end
+------------------------
+-- MAIN LOOP
+------------------------
+RunService.Heartbeat:Connect(function()
+    if not STATE.Running then return end
 
--- Busca inimigo mais próximo
-local function getEnemy()
-    local target = nil
-    local dist = 1000
-    for _, v in pairs(workspace.Enemies:GetChildren()) do
-        if v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 and v:FindFirstChild("HumanoidRootPart") then
-            local d = (root.Position - v.HumanoidRootPart.Position).Magnitude
-            if d < dist then
-                dist = d
-                target = v
+    -- KILL AURA (Dano em todos ao redor)
+    if STATE.Farm.KillAura then
+        for _, enemy in ipairs(getEnemies()) do
+            local d = (root.Position - enemy.HumanoidRootPart.Position).Magnitude
+            if d <= STATE.Farm.AuraRange then
+                equipWeapon()
+                if RigEvent then RigEvent:FireServer("Attack") end
             end
         end
     end
-    return target
-end
 
-------------------------
--- LOOP PRINCIPAL
-------------------------
-task.spawn(function()
-    while STATE.Running do
-        if STATE.Farm.AutoLevel then
-            STATE.Farm.Target = getEnemy()
-            
-            if STATE.Farm.Target then
-                -- Movimentação suave
-                root.CFrame = STATE.Farm.Target.HumanoidRootPart.CFrame * CFrame.new(0, STATE.Farm.Height, STATE.Farm.Distance)
-                
-                -- Ataque condicional
-                if STATE.Farm.AutoAttack then
-                    doAttack()
+    -- AUTO CHEST
+    if STATE.Farm.AutoChest then
+        if not STATE.Farm.Chest or not STATE.Farm.Chest.Parent then
+            STATE.Farm.Chest = nil
+            for _,v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") and v.Name:lower():find("chest") then
+                    STATE.Farm.Chest = v
+                    STATE.Farm.ChestStartTime = os.clock()
+                    break
                 end
             end
         end
-        task.wait(0.1) -- Delay para não crashar e simular velocidade de clique humana
+        if STATE.Farm.Chest then
+            root.CFrame = root.CFrame:Lerp(STATE.Farm.Chest.CFrame * CFrame.new(0, 3, 0), 0.18)
+            return
+        end
+    end
+
+    -- AUTO FARM NPC
+    if STATE.Farm.AutoLevel or STATE.Farm.AutoNearest then
+        if not STATE.Farm.Target or STATE.Farm.Target.Humanoid.Health <= 0 then
+            local best, dist = nil, math.huge
+            for _,e in ipairs(getEnemies()) do
+                local d = (root.Position - e.HumanoidRootPart.Position).Magnitude
+                if d < dist then dist = d best = e end
+            end
+            STATE.Farm.Target = best
+        end
+
+        if STATE.Farm.Target then
+            root.CFrame = root.CFrame:Lerp(STATE.Farm.Target.HumanoidRootPart.CFrame * CFrame.new(0, STATE.Farm.Height, STATE.Farm.BackDistance), 0.18)
+            
+            -- ATAQUE FIXADO (Agora envia o sinal pro servidor)
+            if STATE.Farm.AutoAttack then
+                equipWeapon()
+                if RigEvent then RigEvent:FireServer("Attack") end -- Método de 2025
+                local tool = character:FindFirstChildOfClass("Tool")
+                if tool then tool:Activate() end
+            end
+        end
     end
 end)
