@@ -1,48 +1,40 @@
 --====================================================
--- BLOX FRUITS HUB - VERSÃO ESTUDO (FIXED AUTO-ATTACK)
+-- BLOX FRUITS HUB - KILL AURA + REMOTE ATTACK
 --====================================================
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local VIM = game:GetService("VirtualInputManager") -- Para simular cliques reais
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VIM = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local root = character:WaitForChild("HumanoidRootPart")
-local humanoid = character:WaitForChild("Humanoid")
 
--- Atualiza referências quando o player morre
-player.CharacterAdded:Connect(function(char)
-    character = char
-    root = char:WaitForChild("HumanoidRootPart")
-    humanoid = char:WaitForChild("Humanoid")
-end)
+-- EVENTO DE ATAQUE DO BLOX FRUITS (RIG CONTROLLER)
+local RigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent")
 
-------------------------
--- ESTADO E CONFIGURAÇÃO
-------------------------
 local STATE = {
     Running = true,
-    Weapon = "Combat", -- Mude para o nome da sua arma (ex: "Ice Fruit", "Katana")
+    Weapon = "Combat",
     Farm = {
         AutoLevel = false,
-        AutoAttack = false,
-        Height = 12,
-        Distance = -8,
-        Target = nil
+        KillAura = false, -- Aura de Dano
+        AuraRange = 50,   -- Distância da Aura
+        Height = 15,
+        Distance = 0
     }
 }
 
 ------------------------
--- UI SIMPLES
+-- UI
 ------------------------
 local GUI = Instance.new("ScreenGui", player.PlayerGui)
-GUI.Name = "BF_HUB_FIXED"
+GUI.Name = "BF_HUB_AURA"
 
 local Main = Instance.new("Frame", GUI)
-Main.Size = UDim2.new(0, 250, 0, 200)
+Main.Size = UDim2.new(0, 250, 0, 220)
 Main.Position = UDim2.new(0.4, 0, 0.4, 0)
-Main.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 Main.Active = true
 Main.Draggable = true
 
@@ -60,59 +52,46 @@ local function createToggle(text, y, callback)
     end)
 end
 
-createToggle("Auto Farm", 20, function() 
-    STATE.Farm.AutoLevel = not STATE.Farm.AutoLevel 
-    return STATE.Farm.AutoLevel 
-end)
-
-createToggle("Auto Attack", 70, function() 
-    STATE.Farm.AutoAttack = not STATE.Farm.AutoAttack 
-    return STATE.Farm.AutoAttack 
-end)
+createToggle("Auto Farm (TP)", 20, function() STATE.Farm.AutoLevel = not STATE.Farm.AutoLevel return STATE.Farm.AutoLevel end)
+createToggle("Kill Aura (Dano)", 70, function() STATE.Farm.KillAura = not STATE.Farm.KillAura return STATE.Farm.KillAura end)
 
 ------------------------
--- LÓGICA DE COMBATE
+-- FUNÇÕES DE COMBATE
 ------------------------
 
--- Função para equipar a arma automaticamente
+-- Ataca via Remote (Bypassa o clique do mouse)
+local function attackRemote()
+    if RigEvent then
+        -- O Blox Fruits espera o nome "Attack" para registrar o dano da arma na mão
+        RigEvent:FireServer("Attack")
+    end
+end
+
+-- Equipa arma automaticamente
 local function equipWeapon()
-    if character:FindFirstChildOfClass("Tool") then return end -- Já está com arma na mão
-    
-    local tool = player.Backpack:FindFirstChild(STATE.Weapon) or player.Backpack:FindFirstChildOfClass("Tool")
-    if tool then
-        humanoid:EquipTool(tool)
+    if not character:FindFirstChildOfClass("Tool") then
+        local tool = player.Backpack:FindFirstChild(STATE.Weapon) or player.Backpack:FindFirstChildOfClass("Tool")
+        if tool then
+            player.Character.Humanoid:EquipTool(tool)
+        end
     end
 end
 
--- Função para atacar (Simulando clique e enviando sinal ao servidor)
-local function doAttack()
-    -- 1. Tenta equipar
-    equipWeapon()
-    
-    -- 2. Ativa a ferramenta (Lógica Local)
-    local tool = character:FindFirstChildOfClass("Tool")
-    if tool then
-        tool:Activate()
-        -- 3. Simula clique do mouse para o Anti-Cheat do jogo entender como input humano
-        VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-        VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-    end
-end
-
--- Busca inimigo mais próximo
-local function getEnemy()
-    local target = nil
-    local dist = 1000
-    for _, v in pairs(workspace.Enemies:GetChildren()) do
-        if v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 and v:FindFirstChild("HumanoidRootPart") then
-            local d = (root.Position - v.HumanoidRootPart.Position).Magnitude
-            if d < dist then
-                dist = d
-                target = v
+-- Pega todos os inimigos no alcance para a Kill Aura
+local function getEnemiesInRange()
+    local targets = {}
+    local enemiesFolder = workspace:FindFirstChild("Enemies")
+    if enemiesFolder then
+        for _, v in pairs(enemiesFolder:GetChildren()) do
+            if v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 and v:FindFirstChild("HumanoidRootPart") then
+                local dist = (root.Position - v.HumanoidRootPart.Position).Magnitude
+                if dist <= STATE.Farm.AuraRange then
+                    table.insert(targets, v)
+                end
             end
         end
     end
-    return target
+    return targets
 end
 
 ------------------------
@@ -120,19 +99,28 @@ end
 ------------------------
 task.spawn(function()
     while STATE.Running do
+        -- 1. Lógica de Movimentação (Auto Farm)
         if STATE.Farm.AutoLevel then
-            STATE.Farm.Target = getEnemy()
-            
-            if STATE.Farm.Target then
-                -- Movimentação suave
-                root.CFrame = STATE.Farm.Target.HumanoidRootPart.CFrame * CFrame.new(0, STATE.Farm.Height, STATE.Farm.Distance)
-                
-                -- Ataque condicional
-                if STATE.Farm.AutoAttack then
-                    doAttack()
-                end
+            local enemies = getEnemiesInRange()
+            if #enemies > 0 then
+                -- Vai para o primeiro inimigo encontrado
+                root.CFrame = enemies[1].HumanoidRootPart.CFrame * CFrame.new(0, STATE.Farm.Height, STATE.Farm.Distance)
             end
         end
-        task.wait(0.1) -- Delay para não crashar e simular velocidade de clique humana
+
+        -- 2. Lógica de Kill Aura (Dano em Área)
+        if STATE.Farm.KillAura then
+            equipWeapon()
+            local targets = getEnemiesInRange()
+            if #targets > 0 then
+                attackRemote() -- Manda o sinal de ataque pro servidor
+                
+                -- Opcional: Ativa a ferramenta visualmente
+                local tool = character:FindFirstChildOfClass("Tool")
+                if tool then tool:Activate() end
+            end
+        end
+        
+        task.wait(0.1) -- Velocidade do ataque (0.1 = 10 hits por segundo)
     end
 end)
